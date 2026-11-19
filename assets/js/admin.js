@@ -455,7 +455,7 @@
       const s = rows.find((r) => r.key === b.dataset.edit);
       modal('Тексты: ' + (s.admin_name || s.key),
         '<div class="tip">Слово в <code>*звёздочках*</code> будет красным: <code>МАРКЕТИНГ ДЛЯ *АВТОШКОЛ*</code></div>' +
-        pair('Заголовок', 'title', s) + pair('Подзаголовок', 'subtitle', s, { area: true, rows: 2 }) + (s.key === 'hero' ? '' : pair('Пункт меню', 'menu', s)),
+        pair('Заголовок', 'title', s) + (s.key === 'funnel' ? '<div class="tip">Этапы воронки: каждый этап — с новой строки (лучше 4). Последний этап подсвечивается красным.</div>' + pair('Этапы воронки', 'subtitle', s, { area: true, rows: 5 }) : pair('Подзаголовок', 'subtitle', s, { area: true, rows: 2 })) + (s.key === 'hero' ? '' : pair('Пункт меню', 'menu', s)),
         async (form) => {
           const v = collect(form);
           await run(sb.from('sections').update(v).eq('key', s.key));
