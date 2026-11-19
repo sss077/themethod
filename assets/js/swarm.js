@@ -8,8 +8,7 @@
   'use strict';
   const S = { ready: false, init: () => false, go() {}, burst() {}, set() {}, define() {} };
   window.Swarm = S;
-  if (!window.THREE) return;
-  const THREE = window.THREE;
+  const THREE = window.THREE; // может отсутствовать — тогда рисуем через Canvas 2D
 
   const COL = {
     red: [0.88, 0.21, 0.17], white: [1, 1, 1], grey: [0.58, 0.58, 0.63], dim: [0.2, 0.2, 0.23], warm: [1, 0.86, 0.62],
@@ -41,7 +40,7 @@
     'varying vec3 vC; varying float vA;',
     'void main(){',
     '  vec2 c = gl_PointCoord - 0.5; float d = length(c);',
-    '  float a = smoothstep(0.5, 0.0, d); a *= a;',
+    '  float a = smoothstep(0.5, 0.0, d); a = a * a * 1.35;',
     '  gl_FragColor = vec4(vC * a * vA, a * vA);',
     '}'].join('\n');
 
@@ -199,32 +198,23 @@
     }
   };
 
-  /* ---------------- запуск ---------------- */
-  S.init = function (canvas) {
+  /* ---------------- запуск ----------------
+     Сначала пробуем WebGL (three.js). Если видеокарта/браузер его не дают —
+     рисуем те же частицы через обычный Canvas 2D (чуть меньше частиц). */
+  let mode = '', ctx2d = null, sprites = null, dpr = 1, cvs = null;
+  S.why = '';
+
+  function tryWebGL(canvas) {
+    if (!THREE) { S.why = 'three.js не загрузился'; return false; }
     try {
-      renderer = new THREE.WebGLRenderer({ canvas, antialias: false, alpha: true, powerPreference: 'high-performance' });
-    } catch (e) { return false; }
-    if (!renderer || !renderer.getContext()) return false;
-    mobile = Math.min(window.innerWidth, window.innerHeight) < 600 || window.innerWidth < 768;
-    N = mobile ? 4200 : 9000;
+      const test = canvas.getContext('webgl2') || canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+      if (!test) { S.why = 'браузер не дал WebGL'; return false; }
+      renderer = new THREE.WebGLRenderer({ canvas, context: test, antialias: false, alpha: true, powerPreference: 'high-performance' });
+    } catch (e) { S.why = 'ошибка WebGL: ' + (e && e.message); return false; }
     renderer.setClearColor(0x000000, 0);
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(FOV, 1, 0.1, 100);
     camera.position.z = CAMZ;
-    P = new Float32Array(N * 3); V = new Float32Array(N * 3); T = new Float32Array(N * 3);
-    C = new Float32Array(N * 3); CT = new Float32Array(N * 3); A = new Float32Array(N); AT = new Float32Array(N);
-    SZ = new Float32Array(N); R = new Float32Array(N);
-    perm = new Uint32Array(N);
-    for (let i = 0; i < N; i++) {
-      perm[i] = i;
-      const a = Math.random() * Math.PI * 2, r = rnd(6, 14);
-      P[i * 3] = Math.cos(a) * r; P[i * 3 + 1] = Math.sin(a) * r; P[i * 3 + 2] = rnd(-10, 4);
-      T[i * 3] = P[i * 3]; T[i * 3 + 1] = P[i * 3 + 1]; T[i * 3 + 2] = P[i * 3 + 2];
-      C[i * 3] = C[i * 3 + 1] = C[i * 3 + 2] = 0.3;
-      SZ[i] = (mobile ? 0.05 : 0.038) * rnd(0.55, 1.45);
-      R[i] = Math.random();
-    }
-    for (let i = N - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const tmp = perm[i]; perm[i] = perm[j]; perm[j] = tmp; }
     geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(P, 3).setUsage(THREE.DynamicDrawUsage));
     geo.setAttribute('aColor', new THREE.BufferAttribute(C, 3).setUsage(THREE.DynamicDrawUsage));
@@ -237,7 +227,53 @@
     const pts = new THREE.Points(geo, mat);
     pts.frustumCulled = false;
     group = new THREE.Group(); group.add(pts); scene.add(group);
+    return true;
+  }
 
+  function makeSprite(rgb) {
+    const c = document.createElement('canvas'); c.width = c.height = 32;
+    const x = c.getContext('2d'), gr = x.createRadialGradient(16, 16, 0, 16, 16, 16);
+    gr.addColorStop(0, 'rgba(' + rgb + ',1)'); gr.addColorStop(0.35, 'rgba(' + rgb + ',.55)'); gr.addColorStop(1, 'rgba(' + rgb + ',0)');
+    x.fillStyle = gr; x.fillRect(0, 0, 32, 32);
+    return c;
+  }
+
+  function alloc(n) {
+    N = n;
+    P = new Float32Array(N * 3); V = new Float32Array(N * 3); T = new Float32Array(N * 3);
+    C = new Float32Array(N * 3); CT = new Float32Array(N * 3); A = new Float32Array(N); AT = new Float32Array(N);
+    SZ = new Float32Array(N); R = new Float32Array(N); perm = new Uint32Array(N);
+    for (let i = 0; i < N; i++) {
+      perm[i] = i;
+      const a = Math.random() * Math.PI * 2, r = rnd(6, 14);
+      P[i * 3] = Math.cos(a) * r; P[i * 3 + 1] = Math.sin(a) * r; P[i * 3 + 2] = rnd(-10, 4);
+      T[i * 3] = P[i * 3]; T[i * 3 + 1] = P[i * 3 + 1]; T[i * 3 + 2] = P[i * 3 + 2];
+      C[i * 3] = C[i * 3 + 1] = C[i * 3 + 2] = 0.3;
+      SZ[i] = (mobile ? 0.062 : 0.05) * rnd(0.55, 1.45);
+      R[i] = Math.random();
+    }
+    for (let i = N - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); const tmp = perm[i]; perm[i] = perm[j]; perm[j] = tmp; }
+  }
+
+  S.init = function (canvas) {
+    if (S.ready) return true;
+    mobile = Math.min(window.innerWidth, window.innerHeight) < 600 || window.innerWidth < 768;
+    S.calm = !!(window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches);
+    alloc(mobile ? 4200 : 9000);
+    cvs = canvas;
+    if (tryWebGL(canvas)) mode = 'webgl';
+    else {
+      // холст, на котором пытались включить WebGL, для 2D уже не годится — меняем на новый
+      const fresh = canvas.cloneNode(false);
+      canvas.parentNode.replaceChild(fresh, canvas);
+      cvs = fresh;
+      ctx2d = fresh.getContext('2d');
+      if (!ctx2d) { S.why += '; Canvas 2D недоступен'; return false; }
+      alloc(mobile ? 2200 : 3800);
+      sprites = { red: makeSprite('224,53,43'), white: makeSprite('255,255,255'), warm: makeSprite('255,225,170') };
+      mode = '2d';
+    }
+    S.mode = mode;
     resize();
     window.addEventListener('resize', resize);
     window.addEventListener('pointermove', (e) => {
@@ -256,12 +292,46 @@
 
   function resize() {
     const w = window.innerWidth, h = window.innerHeight;
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 1.75));
-    renderer.setSize(w, h, false);
-    camera.aspect = w / h; camera.updateProjectionMatrix();
-    viewW = VIEWH * camera.aspect;
-    mat.uniforms.uScale.value = renderer.getPixelRatio() * h / (2 * Math.tan((FOV / 2) * Math.PI / 180));
-    if (curName) { Object.values(states).forEach((s) => { s._pts = null; }); apply(curName, true); }
+    if (mode === 'webgl') {
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, mobile ? 1.5 : 1.75));
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h; camera.updateProjectionMatrix();
+      mat.uniforms.uScale.value = renderer.getPixelRatio() * h / (2 * Math.tan((FOV / 2) * Math.PI / 180));
+    } else {
+      dpr = Math.min(window.devicePixelRatio || 1, 1.5);
+      cvs.width = Math.round(w * dpr); cvs.height = Math.round(h * dpr);
+    }
+    viewW = VIEWH * (w / h);
+    if (curName) { Object.values(states).forEach((st) => { st._pts = null; }); apply(curName, true); }
+  }
+
+  /* отрисовка через Canvas 2D (запасной вариант) */
+  function draw2d(rotY, rotX) {
+    const w = window.innerWidth, h = window.innerHeight;
+    const ctx = ctx2d;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.clearRect(0, 0, w, h);
+    ctx.globalCompositeOperation = 'lighter';
+    const F = (h / 2) / Math.tan((FOV / 2) * Math.PI / 180);
+    const cy = Math.cos(rotY), sy = Math.sin(rotY), cx = Math.cos(rotX), sx = Math.sin(rotX);
+    for (let i = 0; i < N; i++) {
+      const a = A[i];
+      if (a < 0.02) continue;
+      const i3 = i * 3, x = P[i3], y = P[i3 + 1], z = P[i3 + 2];
+      const x1 = x * cy + z * sy, z1 = -x * sy + z * cy;
+      const y1 = y * cx - z1 * sx, z2 = y * sx + z1 * cx;
+      const d = CAMZ - z2;
+      if (d < 0.4) continue;
+      const k = F / d, px = w / 2 + (x1 + g.x) * k, py = h / 2 - (y1 + g.y) * k;
+      if (px < -20 || px > w + 20 || py < -20 || py > h + 20) continue;
+      const r = Math.max(1.2, SZ[i] * k * 1.6);
+      const cr = C[i3], cg = C[i3 + 1];
+      const spr = cr - cg > 0.25 ? sprites.red : (cr > 0.9 && cg > 0.75 && C[i3 + 2] < 0.8 ? sprites.warm : sprites.white);
+      ctx.globalAlpha = Math.min(1, a * (spr === sprites.white ? Math.max(0.25, cg) : 1));
+      ctx.drawImage(spr, px - r, py - r, r * 2, r * 2);
+    }
+    ctx.globalAlpha = 1;
   }
 
   function loop(now) {
@@ -276,15 +346,14 @@
     else g.rot += g.rotV * dt + (def.scrollSpin || 0) * params.speed * dt;
     const tiltT = mouse.active && def.follow !== false ? mouse.nx * 0.25 : 0;
     g.tilt += (tiltT - g.tilt) * 0.05 * f;
-    group.position.set(g.x, g.y, 0);
-    group.rotation.y = g.rot + g.tilt;
-    group.rotation.x = mouse.active && def.follow !== false ? -mouse.ny * 0.12 : 0;
+    const rotY = g.rot + g.tilt, rotX = mouse.active && def.follow !== false ? -mouse.ny * 0.12 : 0;
+    if (group) { group.position.set(g.x, g.y, 0); group.rotation.y = rotY; group.rotation.x = rotX; }
     if (def.dyn) def.dyn(t, dt, { T, CT, AT, P, V, N, perm, R, viewW, viewH: VIEWH, params, COL, g });
 
-    const k = (def.k || 0.022) * f, damp = Math.pow(def.damp || 0.86, f);
+    const k = (def.k || 0.022) * f * (S.calm ? 0.6 : 1), damp = Math.pow(def.damp || 0.86, f);
     const mx = mouse.x - g.x, my = mouse.y - g.y, rep = def.repel == null ? 1 : def.repel;
     const rr = (mobile ? 0.5 : 0.75), rr2 = rr * rr;
-    const cb = Math.cos(group.rotation.y), sb = Math.sin(group.rotation.y);
+    const cb = Math.cos(rotY), sb = Math.sin(rotY);
     for (let i = 0; i < N; i++) {
       const i3 = i * 3;
       let vx = V[i3] + (T[i3] - P[i3]) * k * (0.7 + R[i] * 0.6);
@@ -306,10 +375,12 @@
       C[i3] += (CT[i3] - C[i3]) * cl; C[i3 + 1] += (CT[i3 + 1] - C[i3 + 1]) * cl; C[i3 + 2] += (CT[i3 + 2] - C[i3 + 2]) * cl;
       A[i] += (AT[i] - A[i]) * 0.045 * f;
     }
-    geo.attributes.position.needsUpdate = true;
-    geo.attributes.aColor.needsUpdate = true;
-    geo.attributes.aAlpha.needsUpdate = true;
-    renderer.render(scene, camera);
+    if (mode === 'webgl') {
+      geo.attributes.position.needsUpdate = true;
+      geo.attributes.aColor.needsUpdate = true;
+      geo.attributes.aAlpha.needsUpdate = true;
+      renderer.render(scene, camera);
+    } else draw2d(rotY, rotX);
     requestAnimationFrame(loop);
   }
 

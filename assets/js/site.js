@@ -653,6 +653,45 @@
     ScrollTrigger.refresh();
   }
 
+  /* ---------- без GSAP / «уменьшить движение»: фигура по секции в центре экрана ---------- */
+  function calmScenes() {
+    const W = window.Swarm;
+    const scenes = Array.from(app.querySelectorAll('[data-scene]'));
+    const fun = app.querySelector('#funnel');
+    const off = app.querySelector('#offer');
+    const pick = () => {
+      const mid = window.innerHeight * 0.55;
+      let sec = scenes[0];
+      for (const el of scenes) if (el.getBoundingClientRect().top <= mid) sec = el;
+      if (!sec) return;
+      const key = sec.dataset.scene;
+      if (key === 'funnel') W.go('funnel' + ((+(fun && fun.dataset.stages) || 4) - 1));
+      else if (key === 'offer') W.go('cases'); // в спокойном режиме весь текст оффера виден сразу — цифры роя не накладываем
+      else if (key === 'form' && App.formDone) W.go('check');
+      else W.go(key);
+    };
+    window.addEventListener('scroll', pick, { passive: true });
+    pick();
+  }
+
+  /* ---------- диагностика: откройте сайт с ?debug=1 ---------- */
+  function debugPanel() {
+    if (!/[?&]debug=1/.test(location.search)) return;
+    const W = window.Swarm || {};
+    const el = document.createElement('div');
+    el.style.cssText = 'position:fixed;left:8px;bottom:8px;z-index:9999;background:#000c;color:#fff;font:12px/1.5 monospace;padding:10px 12px;border:1px solid #E0352B;border-radius:8px;max-width:92vw;pointer-events:none';
+    const yes = (v) => (v ? '✅' : '❌');
+    const draw = () => {
+      el.innerHTML = [
+        'GSAP ' + yes(window.gsap) + '  ScrollTrigger ' + yes(window.ScrollTrigger) + '  Lenis ' + yes(window.Lenis) + '  three.js ' + yes(window.THREE),
+        'Частицы: ' + (W.ready ? '✅ ' + W.mode + (W.mode === '2d' ? ' (запасной режим: ' + W.why + ')' : '') : '❌ ' + (W.why || 'не запущены')),
+        'Анимации: ' + (MOTION ? '✅' : '❌ ' + (REDUCE ? 'в системе включено «уменьшить движение»' : 'GSAP не загрузился')),
+        'Фигура: ' + (W.state || '—') + '   экран: ' + innerWidth + '×' + innerHeight,
+      ].join('<br>');
+    };
+    document.body.appendChild(el); draw(); setInterval(draw, 500);
+  }
+
   /* ---------- первый экран: вход после прелоадера ---------- */
   function heroIntro() {
     const hero = app.querySelector('#hero');
@@ -736,13 +775,14 @@
       // рой частиц
       const canvas = document.getElementById('swarm');
       let swarmOk = false;
-      if (canvas && window.Swarm && !REDUCE) {
+      if (canvas && window.Swarm) {
         try { await (document.fonts && document.fonts.ready); } catch (e) { /* ничего */ }
         swarmOk = window.Swarm.init(canvas);
         if (swarmOk) { defineSwarm(d); document.documentElement.classList.add('has-swarm'); }
       }
       preloader.set(90);
-      if (MOTION) initMotion(d); else App.reveal(app);
+      if (MOTION) initMotion(d); else { App.reveal(app); if (swarmOk) calmScenes(); }
+      debugPanel();
       await preloader.finish();
       if (swarmOk) window.Swarm.go(app.querySelector('#hero') ? 'hero' : 'cases');
       if (MOTION) heroIntro();
