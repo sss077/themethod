@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Админка — управление сайтом</title>
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="theme-color" content="#0B0B0D">
+  <link rel="icon" href="assets/img/favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="assets/css/admin.css">
+</head>
+<body>
+  <!-- Вход -->
+  <div id="login" class="login" hidden>
+    <form class="login-card" id="loginForm">
+      <div class="login-logo"><span class="logo-mark"></span>Админка сайта</div>
+      <p class="muted">Войдите, чтобы редактировать кейсы, цены и тексты.</p>
+      <label class="f"><span>Email</span><input type="email" name="email" autocomplete="username" required></label>
+      <label class="f"><span>Пароль</span><input type="password" name="password" autocomplete="current-password" required></label>
+      <button class="btn btn-primary btn-block" type="submit">Войти</button>
+      <p class="login-err" id="loginErr" role="alert"></p>
+    </form>
+  </div>
+
+  <!-- Панель -->
+  <div id="shell" class="shell" hidden>
+    <header class="top">
+      <button class="icon-btn menu-btn" type="button" id="menuBtn" aria-label="Меню">☰</button>
+      <div class="top-logo"><span class="logo-mark"></span><span>Админка</span></div>
+      <div class="top-r">
+        <a class="btn btn-ghost btn-sm" href="index.html" target="_blank" rel="noopener">Открыть сайт ↗</a>
+        <button class="btn btn-ghost btn-sm" type="button" id="logoutBtn">Выйти</button>
+      </div>
+    </header>
+    <nav class="side" id="side" aria-label="Разделы">
+      <a href="#leads" data-route="leads">📥 Заявки <b class="cnt" id="newCnt" hidden></b></a>
+      <a href="#cases" data-route="cases">🏆 Кейсы</a>
+      <a href="#settings" data-route="settings">⚙️ Настройки</a>
+      <a href="#sections" data-route="sections">🧩 Секции</a>
+      <a href="#list/pains" data-route="list/pains">😣 Боли</a>
+      <a href="#list/services" data-route="list/services">🧰 Что входит</a>
+      <a href="#list/steps" data-route="list/steps">🪜 Как работаем</a>
+      <a href="#list/faq" data-route="list/faq">❓ FAQ</a>
+      <a href="#list/team" data-route="list/team">👥 Команда</a>
+      <div class="side-foot muted" id="whoami"></div>
+    </nav>
+    <main class="view" id="view"></main>
+  </div>
+
+  <div id="boot" class="boot"><span class="logo-mark"></span></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.2/Sortable.min.js"></script>
+  <script src="config.js"></script>
+  <script src="assets/js/core.js"></script>
+  <script src="assets/js/admin.js"></script>
+</body>
+</html>
