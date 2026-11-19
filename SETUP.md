@@ -56,10 +56,17 @@
 2. Вставьте команду, **заменив email на свой** (тот, что указали в шаге 4):
    ```sql
    insert into public.admins (user_id)
-   select id from auth.users where email = 'ваш@email.com';
+   select id from auth.users where email = 'ваш@email.com'
+   on conflict (user_id) do nothing;
    ```
-3. Нажмите **Run**. Должно появиться сообщение об успехе с **1 row** (одна строка добавлена).
-   Если написано `0 rows` — email введён не так, как в шаге 4.
+3. Нажмите **Run** (один раз). Должно появиться сообщение об успехе.
+4. Проверьте, что вы в списке админов:
+   ```sql
+   select u.email from public.admins a join auth.users u on u.id = a.user_id;
+   ```
+   Если в ответе ваш email — готово. Если пусто — email введён не так, как в шаге 4.
+
+> Ошибка `duplicate key value violates unique constraint "admins_pkey"` (если вы запускали старый вариант команды дважды) означает, что аккаунт **уже** админ — всё в порядке.
 
 ## Шаг 6. Закройте регистрацию посторонним
 
